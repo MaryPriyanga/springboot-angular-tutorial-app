@@ -1,0 +1,55 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-container
+    restart: always
+    environment:
+      MYSQL_DATABASE: upl_learning_platform
+      MYSQL_ROOT_PASSWORD: 1234
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  upl-learning-platform:
+    build:
+      context: ./upl-learning-platform
+      dockerfile: Dockerfile # Use the provided Dockerfile
+    container_name: springboot-container
+    depends_on:
+      - mysql
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/upl_learning_platform
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 1234
+      # Setting profile to 'dev' if you have specific dev configs for Spring Boot
+      SPRING_PROFILES_ACTIVE: dev
+    ports:
+      - "8081:8081"
+    volumes:
+      # Mount the source code for live reload (Spring Boot DevTools)
+      - ./upl-learning-platform/src:/app/src
+      - ./upl-learning-platform/pom.xml:/app/pom.xml # Needed if using Maven wrapper inside container
+      # Mount Maven local repository to speed up builds (optional, but recommended)
+      - ~/.m2:/root/.m2
+      # Mount the target directory to see compiled classes (optional)
+      - ./upl-learning-platform/target:/app/target
+    # Command to run Spring Boot with DevTools
+    # Make sure you have spring-boot-devtools dependency in your pom.xml/build.gradle
+    command: >
+      sh -c "sleep 20 && ./mvnw spring-boot:run -Dspring-boot.run.fork=false -Dspring-boot.devtools.restart.enabled=true -Dspring-boot.devtools.restart.pollInterval=500ms -Dspring-boot.devtools.livereload.enabled=true" # Ensure DevTools is configured
+
+  upltutorial:
+    build:
+      context: ./upltutorial
+      dockerfile: Dockerfile # <--- NEW DOCKERFILE
+    container_name: angular-container
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./upltutorial:/app
+      - /app/node_modules
+    command: npm start # Or ng serve --host 0.0.0.0 --port 4200 --disable-host-check
+
+volumes:
+  mysql_data:
