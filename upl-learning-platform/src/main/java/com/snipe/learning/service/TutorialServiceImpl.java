@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +20,7 @@ import com.snipe.learning.entity.Tutorial;
 import com.snipe.learning.entity.TutorialEditHistory;
 import com.snipe.learning.entity.User;
 import com.snipe.learning.exception.UPLException;
+import com.snipe.learning.model.PageResponse;
 import com.snipe.learning.model.TutorialDTO;
 import com.snipe.learning.repository.CourseRepository;
 import com.snipe.learning.repository.TutorialEditHistoryRepository;
@@ -46,6 +49,7 @@ public class TutorialServiceImpl implements TutorialService {
     private Mapper mapper;
 
     @Override
+    @Cacheable(value = "tutorialsbyId", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateTutorialCacheKey(#courseId, #pageable.pageNumber, #pageable.pageSize)")
     public List<TutorialDTO> getAllTutorialsByCourseId(int courseId, Pageable pageable) throws UPLException {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new UPLException("Course not found"));
@@ -76,6 +80,7 @@ public class TutorialServiceImpl implements TutorialService {
 
 
     @Override
+    @CacheEvict(value="tutorialsbyId" , allEntries = true)
     public void addTutorial(TutorialDTO tutorialDTO) throws UPLException {
         Course course = courseRepository.findById(tutorialDTO.getCourseId())
                 .orElseThrow(() -> new UPLException("Course does not exist"));
@@ -111,6 +116,7 @@ public class TutorialServiceImpl implements TutorialService {
     
     @Override
     @Transactional
+    @CacheEvict(value = "tutorialsbyId", allEntries = true)
     public String updateTutorial(Integer id, TutorialDTO tutorialDTO) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(id)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
@@ -157,6 +163,7 @@ public class TutorialServiceImpl implements TutorialService {
 
     @Override
     @Transactional
+    @CacheEvict(value="tutorialsbyId" , allEntries = true)
     public String deleteTutorial(Integer id) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(id)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
@@ -237,23 +244,12 @@ public class TutorialServiceImpl implements TutorialService {
 
 	
 	@Override
-	public void approveTutorial(Integer id) throws UPLException {
+	public void updateTutorialStatus(Integer id, Status status) throws UPLException {
 
         Tutorial tutorial = tutorialRepository.findById(id)
                 .orElseThrow(() -> new UPLException("Tutorial Not found"));
         
-        tutorial.setStatus(Status.Active);
-        tutorialRepository.save(tutorial);
-	}
-
-	@Override
-	public void rejectTutorial(Integer id) throws UPLException {
-
-        Tutorial tutorial = tutorialRepository.findById(id)
-                .orElseThrow(() -> new UPLException("Tutorial Not found"));
-        
-        // Admin Approval logic
-        tutorial.setStatus(Status.Rejected);
+        tutorial.setStatus(status);
         tutorialRepository.save(tutorial);
 	}
 
@@ -284,7 +280,7 @@ public class TutorialServiceImpl implements TutorialService {
 
 
 	@Override
-	public Page<TutorialDTO> getPendingTutorials(int page, int size) throws UPLException {
+	public PageResponse<TutorialDTO> getPendingTutorials(int page, int size) throws UPLException {
 		
 		Pageable pageable = PageRequest.of(page, size);
 		
@@ -294,7 +290,20 @@ public class TutorialServiceImpl implements TutorialService {
 				throw new UPLException("No pending Tutorials found");
 			}
 			
-			return pendingTutorialssObj.map(mapper::toTutorialDTO);
+			 List<TutorialDTO> dtos = pendingTutorialssObj.getContent()
+				        .stream()
+				        .map(mapper::toTutorialDTO)
+				        .collect(Collectors.toList());
+
+				    return new PageResponse<>(
+				        dtos,
+				        pendingTutorialssObj.getNumber(),
+				        pendingTutorialssObj.getSize(),
+				        pendingTutorialssObj.getTotalElements(),
+				        pendingTutorialssObj.getTotalPages(),
+				        pendingTutorialssObj.isLast()
+				    );
+				    
 	}
 
 }

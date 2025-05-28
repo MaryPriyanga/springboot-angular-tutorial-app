@@ -19,6 +19,8 @@ public interface CourseRepository extends JpaRepository<Course, Integer>{
 	Page<Course> findByStatusIn(List<Status> statuses, Pageable pageable);
 	Page<Course> findByStatus(Status active, Pageable pageable);
 	Page<Course> findByInstructorAndStatusIn(User currentUser, List<Status> statuses, Pageable pageable);
+	Page<Course> findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(String title, String description,
+			Pageable pageable);
 
 
 }

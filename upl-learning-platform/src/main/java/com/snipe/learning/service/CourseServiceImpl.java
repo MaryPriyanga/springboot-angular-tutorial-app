@@ -2,8 +2,12 @@ package com.snipe.learning.service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +23,7 @@ import com.snipe.learning.entity.Tutorial;
 import com.snipe.learning.entity.User;
 import com.snipe.learning.exception.UPLException;
 import com.snipe.learning.model.CourseDTO;
+import com.snipe.learning.model.PageResponse;
 import com.snipe.learning.repository.CourseEditHistoryRepository;
 import com.snipe.learning.repository.CourseRepository;
 import com.snipe.learning.repository.TutorialRepository;
@@ -46,14 +51,15 @@ public class CourseServiceImpl implements CourseService {
     private Mapper mapper;
 
     @Override
-   // @Cacheable(value = "allCourses", key = "'page_' + #page + '_size_' + #size + '_user_' + (#root.target.getCurrentUserOrNull()?.id ?: 'anonymous')")
-    public Page<CourseDTO> getAllCourses(int page, int size) throws UPLException {
+    @Cacheable(value = "courses", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateCourseCacheKey(#page, #size)")
+    public PageResponse<CourseDTO> getAllCourses(int page, int size) throws UPLException {
         User currentUser = getCurrentUserOrNull();
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Course> courses;
 
         if (currentUser == null) {
             // General public: only active courses
+        	System.out.println("Fetching from DB");
             courses = courseRepository.findByStatus(Status.Active, pageable);
         } else if (isAdmin(currentUser)) {
         	List<Status> statuses = Arrays.asList(Status.Pending, Status.Rejected, Status.Active);
@@ -69,10 +75,23 @@ public class CourseServiceImpl implements CourseService {
             throw new UPLException("No courses found");
         }
 
-        return courses.map(mapper::toCourseDto); // maps Course -> CourseDTO
+        List<CourseDTO> dtos = courses.getContent()
+                .stream()
+                .map(mapper::toCourseDto)
+                .collect(Collectors.toList());
+        
+        return new PageResponse<>(
+                dtos,
+                courses.getNumber(),
+                courses.getSize(),
+                courses.getTotalElements(),
+                courses.getTotalPages(),
+                courses.isLast()
+            );
     }
 
     @Override
+    @CacheEvict(value = "courses", allEntries = true)
     public CourseDTO addCourse(CourseDTO courseDTO) throws UPLException {
         if (courseRepository.findByTitleIgnoreCase(courseDTO.getTitle()).isPresent()) {
             throw new UPLException("Course with this title already exists");
@@ -93,10 +112,15 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
-   // @CachePut(value="courses" , key="#id")
+    @CacheEvict(value="courses" , allEntries = true)
     public CourseDTO updateCourse(Integer id, CourseDTO courseDTO) throws UPLException {
         Course course = findCourseById(id);
-       
+        
+        Optional<Course> existingCourse = courseRepository.findByTitleIgnoreCase(courseDTO.getTitle());
+        if (existingCourse.isPresent() && !existingCourse.get().getId().equals(id)) {
+            throw new UPLException("Course with this title already exists");
+        }
+        
         User loggedInUser = getLoggedInUser();
 
         if (!(isAdmin(loggedInUser) || isInstructorOwner(loggedInUser, course))) {
@@ -125,7 +149,7 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
-    //@CacheEvict(value="courses" ,key="#id")
+    @CacheEvict(value="courses" , allEntries = true)
     @Transactional
     public String deleteCourse(Integer id) throws UPLException {
         Course course = findCourseById(id);
@@ -190,31 +214,19 @@ public class CourseServiceImpl implements CourseService {
         courseEditHistoryRepository.save(history);
     }
 
-	@Override
-	//@CachePut(value = "courses", key = "#id")
-	public void approveCourse(Integer id) throws UPLException {
-
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new UPLException("Course Not found"));
-        
-        // Admin Approval logic
-        course.setStatus(Status.Active);
+    @CacheEvict(value = "courses", allEntries = true)
+    public void updateCourseStatus(Integer id, Status status) throws UPLException {
+    	User user = getLoggedInUser();
+    	if (!isAdmin(user)) {
+    	    throw new UPLException("Only admins can approve or reject courses");
+    	}
+        Course course = findCourseById(id);
+        course.setStatus(status);
         courseRepository.save(course);
-	}
+    }
 
 	@Override
-	public void rejectCourse(Integer id) throws UPLException {
-
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new UPLException("Course Not found"));
-        
-        // Admin Approval logic
-        course.setStatus(Status.Rejected);
-        courseRepository.save(course);
-	}
-
-	@Override
-	public Page<CourseDTO> getPendingCourses(int page, int size) throws UPLException {
+	public PageResponse<CourseDTO> getPendingCourses(int page, int size) throws UPLException {
 		Pageable pageable = PageRequest.of(page, size);
 
 		Page<Course> pendingCoursesObj = courseRepository.findByStatus(Status.Pending, pageable);
@@ -223,7 +235,44 @@ public class CourseServiceImpl implements CourseService {
 			throw new UPLException("No pending Courses found");
 		}
 
-		return pendingCoursesObj.map(mapper::toCourseDto);
+		 List<CourseDTO> dtos = pendingCoursesObj.getContent()
+			        .stream()
+			        .map(mapper::toCourseDto)
+			        .collect(Collectors.toList());
+		 
+		 return new PageResponse<>(
+			        dtos,
+			        pendingCoursesObj.getNumber(),
+			        pendingCoursesObj.getSize(),
+			        pendingCoursesObj.getTotalElements(),
+			        pendingCoursesObj.getTotalPages(),
+			        pendingCoursesObj.isLast()
+			    );
 
+	}
+
+	@Override
+	public PageResponse<CourseDTO> searchCourses(String query, int page, int size) throws UPLException {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        
+        Page<Course> courses = courseRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(query, query, pageable);
+        if (courses.isEmpty()) {
+            throw new UPLException("No courses found");
+        }
+
+        List<CourseDTO> dtos = courses.getContent()
+		        .stream()
+		        .map(mapper::toCourseDto)
+		        .collect(Collectors.toList());
+	 
+	 return new PageResponse<>(
+		        dtos,
+		        courses.getNumber(),
+		        courses.getSize(),
+		        courses.getTotalElements(),
+		        courses.getTotalPages(),
+		        courses.isLast()
+		    );
 	}
 }

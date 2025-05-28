@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.snipe.learning.AOP.HandlerService;
+import com.snipe.learning.entity.Course.Status;
 import com.snipe.learning.service.AdminService;
 import com.snipe.learning.service.CourseService;
 import com.snipe.learning.service.TutorialService;
@@ -77,7 +78,7 @@ public class AdminController {
     @PostMapping("/approve-course/{id}")
     public ResponseEntity<?> approveCourse(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            courseService.approveCourse(id);
+            courseService.updateCourseStatus(id, Status.Active);
             return null;
         }, "INFO.COURSE_APPROVED");
     }
@@ -85,7 +86,7 @@ public class AdminController {
     @PostMapping("/reject-course/{id}")
     public ResponseEntity<?> rejectCourse(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            courseService.rejectCourse(id);
+            courseService.updateCourseStatus(id,Status.Rejected);
             return null;
         }, "INFO.COURSE_REJECTED");
     }
@@ -93,7 +94,7 @@ public class AdminController {
     @PostMapping("/approve-tutorial/{id}")
     public ResponseEntity<?> approveTutorial(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            tutorialService.approveTutorial(id);
+            tutorialService.updateTutorialStatus(id, Status.Active);
             return null;
         }, "INFO.TUTORIAL_APPROVED");
     }
@@ -101,7 +102,7 @@ public class AdminController {
     @PostMapping("/reject-tutorial/{id}")
     public ResponseEntity<?> rejectTutorial(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            tutorialService.rejectTutorial(id);
+            tutorialService.updateTutorialStatus(id, Status.Rejected);
             return null;
         }, "INFO.TUTORIAL_REJECTED");
     }
