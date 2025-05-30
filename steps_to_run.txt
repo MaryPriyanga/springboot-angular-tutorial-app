@@ -2,15 +2,19 @@ Steps to Run on Another Machine
 1)Install Docker Desktop
 https://www.docker.com/products/docker-desktop
 
-2)Copy project folder
+2)Install Git
+
+3)Copy project folder
 SpringBootTutorialApp/ (copy from github https://github.com/MaryPriyanga/springboot-angular-tutorial-app.git)
 
-Open terminal in that directory:
+git clone https://github.com/MaryPriyanga/springboot-angular-tutorial-app.git
+
+4)Open terminal in that directory:
 
 cd SpringBootTutorialApp
 docker-compose up --build
 
-3)Docker will:
+5)Docker will:
 
 Build Spring Boot using Maven
 Serve Angular using Node.js
