@@ -48,7 +48,7 @@ public class TutorialController {
     public ResponseEntity<?> fetchTutorialById(@PathVariable Integer id) {
         return handlerService.handleServiceCall(
                 () -> tutorialService.getTutorial(id),
-                "INFO.TUTORIALS_FETCH_SUCCESS"
+                "INFO.TUTORIAL_FETCH_SUCCESS"
         );
     }
 

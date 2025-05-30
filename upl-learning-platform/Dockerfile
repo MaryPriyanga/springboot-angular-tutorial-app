@@ -1,4 +1,6 @@
-FROM eclipse-temurin:21-jdk-alpine
+FROM openjdk:21-jdk-alpine
+VOLUME /tmp
 WORKDIR /app
-COPY target/upl-learning-platform-0.0.1-SNAPSHOT.jar app.jar
+COPY target/*.jar app.jar
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

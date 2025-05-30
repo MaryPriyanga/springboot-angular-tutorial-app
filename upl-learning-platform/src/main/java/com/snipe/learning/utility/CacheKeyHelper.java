@@ -10,6 +10,7 @@ public class CacheKeyHelper {
 	        String userId = (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName()))
 	                ? "anonymous"
 	                : auth.getName();
+	        System.out.println("Generated cache key: " + userId);
 	        return "page_" + page + "_size_" + size + "_user_" + userId;
 	    }
 	    

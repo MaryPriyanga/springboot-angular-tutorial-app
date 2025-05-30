@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   mysql:
     image: mysql:8.0
@@ -10,19 +12,26 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
 
   redis:
     image: redis:latest
     container_name: redis
+    restart: always
     ports:
       - "6379:6379"
-    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     volumes:
       - redis_data:/data
 
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: redis-commander
+    restart: always
     environment:
       - REDIS_HOSTS=local:redis:6379
     ports:
@@ -35,6 +44,7 @@ services:
       context: ./upl-learning-platform
       dockerfile: Dockerfile
     container_name: springboot-container
+    restart: always
     depends_on:
       - mysql
       - redis
@@ -42,39 +52,57 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/upl_learning_platform
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: 1234
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: docker
     ports:
       - "8081:8081"
     volumes:
-      - ./upl-learning-platform/src:/app/src
-      - ./upl-learning-platform/pom.xml:/app/pom.xml
       - ~/.m2:/root/.m2
-      - ./upl-learning-platform/target:/app/target
     command: >
-      sh -c "sleep 20 && ./mvnw spring-boot:run -Dspring-boot.run.fork=false -Dspring-boot.devtools.restart.enabled=true -Dspring-boot.devtools.restart.pollInterval=500ms -Dspring-boot.devtools.livereload.enabled=true"
+      sh -c "
+        echo 'Waiting for Redis to be ready...' &&
+        until nc -z redis 6379; do
+          echo 'Waiting for redis...'; sleep 2;
+        done &&
+        echo 'Redis is up! Starting Spring Boot app...' &&
+        ./mvnw spring-boot:run -Dspring-boot.run.fork=false
+      "
 
   upltutorial:
     build:
       context: ./upltutorial
       dockerfile: Dockerfile
     container_name: angular-container
+    restart: always
     ports:
-      - "4200:4200"
+      - "4200:80"
+    depends_on:
+      - upl-learning-platform
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
     volumes:
-      - ./upltutorial:/app
-      - /app/node_modules
-    command: npm start
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - upl-learning-platform
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana-container
+    restart: always
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
 
 volumes:
   mysql_data:
-  grafana_data:
   redis_data:
+  grafana_data:

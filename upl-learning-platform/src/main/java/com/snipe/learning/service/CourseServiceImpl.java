@@ -74,6 +74,9 @@ public class CourseServiceImpl implements CourseService {
         if (courses.isEmpty()) {
             throw new UPLException("No courses found");
         }
+        
+        
+        System.out.println("getAllCourses called with page=" + page + ", size=" + size);
 
         List<CourseDTO> dtos = courses.getContent()
                 .stream()

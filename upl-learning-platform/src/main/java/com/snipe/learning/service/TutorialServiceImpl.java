@@ -190,6 +190,7 @@ public class TutorialServiceImpl implements TutorialService {
     }
 
     @Override
+    @Cacheable(value="tutorial")
     public TutorialDTO getTutorial(Integer tutorialId) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(tutorialId)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
