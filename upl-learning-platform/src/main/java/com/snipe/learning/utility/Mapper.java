@@ -5,10 +5,12 @@ import org.springframework.stereotype.Component;
 
 import com.snipe.learning.entity.Course;
 import com.snipe.learning.entity.Course.Status;
+import com.snipe.learning.entity.CourseRating;
 import com.snipe.learning.entity.Tutorial;
 import com.snipe.learning.entity.User;
 import com.snipe.learning.exception.UPLException;
 import com.snipe.learning.model.CourseDTO;
+import com.snipe.learning.model.CourseRatingDto;
 import com.snipe.learning.model.TutorialDTO;
 import com.snipe.learning.model.UserDTO;
 
@@ -24,6 +26,7 @@ public class Mapper {
 	        dto.setInstructorName(course.getInstructor().getName());
 	        dto.setStatus(course.getStatus().name());
 	        dto.setCreatedAt(course.getCreatedAt());
+	        dto.setViews(course.getViews());
 	        return dto;
 	    }
 	
@@ -35,6 +38,7 @@ public class Mapper {
 		course.setInstructor(instructor);
 		course.setStatus(Status.Pending);
 		course.setCreatedAt(courseDto.getCreatedAt());
+		course.setViews(0L);
 	        return course;
 	    }
 	
@@ -105,4 +109,26 @@ public class Mapper {
 	    	return user;
 	    	
 	    }
+	    
+	    public CourseRatingDto  toCourseRatingDto(CourseRating courseRating) {
+	    	CourseRatingDto dto = new CourseRatingDto();
+		        dto.setId(courseRating.getId());
+		        dto.setCourseId(courseRating.getCourseId());
+		        dto.setComment(courseRating.getComment());
+		        dto.setRating(courseRating.getRating());
+		        dto.setCreatedAt(courseRating.getCreatedAt());
+		        dto.setName(courseRating.getName());
+		        return dto;
+		    }
+		
+		public CourseRating toCourseRatingEntity(CourseRatingDto courseRatingDto) throws UPLException {
+			CourseRating courseRating = new CourseRating();
+			courseRating.setId(courseRatingDto.getId());
+			courseRating.setCourseId(courseRatingDto.getCourseId());
+			courseRating.setComment(courseRatingDto.getComment());
+			courseRating.setRating(courseRatingDto.getRating());
+			courseRating.setCreatedAt(courseRatingDto.getCreatedAt());
+			courseRating.setName(courseRatingDto.getName());
+		        return courseRating;
+		    }
 }

@@ -1,5 +1,9 @@
 package com.snipe.learning.controller;
 
+import java.io.IOException;
+
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -10,11 +14,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.snipe.learning.AOP.HandlerService;
 import com.snipe.learning.exception.UPLException;
 import com.snipe.learning.model.TutorialDTO;
@@ -29,7 +35,21 @@ public class TutorialController {
 
     @Autowired
     private HandlerService handlerService;
+    
+    @Autowired
+    private final ObjectMapper objectMapper;
 
+    public TutorialController(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
+    @GetMapping("/fetchAllTutorials")
+    public ResponseEntity<?> fetchAllTutorials() {
+        return handlerService.handleServiceCall(
+                () -> tutorialService.getAllTutorials(),
+                "INFO.TUTORIALS_FETCH_SUCCESS"
+        );
+    }
 
     @GetMapping("/fetchAllTutorialsByCourseId/{courseId}")
     public ResponseEntity<?> fetchAllTutorialsByCourseId(
@@ -63,30 +83,56 @@ public class TutorialController {
 
     @PostMapping("/createTutorial")
     @PreAuthorize("hasAnyRole('Admin','Instructor')")
-    public ResponseEntity<?> createTutorial(@RequestBody TutorialDTO tutorialDTO) {
+    public ResponseEntity<?> createTutorial(
+        @RequestPart("tutorial") String tutorialJson,
+        @RequestPart(value = "descriptionFile", required = false) MultipartFile descriptionFile
+    ) throws IOException, TikaException {
+
+        TutorialDTO tutorialDTO = objectMapper.readValue(tutorialJson, TutorialDTO.class);
+
+        if (descriptionFile != null && !descriptionFile.isEmpty()) {
+            Tika tika = new Tika();
+            String extractedText = tika.parseToString(descriptionFile.getInputStream());
+            tutorialDTO.setContent(extractedText); // or tutorialDTO.setDescription(...)
+        }
+
         return handlerService.handleServiceCall(
-                () -> {
-                    tutorialService.addTutorial(tutorialDTO);
-                    return null;
-                },
-                "INFO.TUTORIAL_INSERT_SUCCESS"
+            () -> {
+                tutorialService.addTutorial(tutorialDTO);
+                return null;
+            },
+            "INFO.TUTORIAL_INSERT_SUCCESS"
         );
     }
 
     @PutMapping("/updateTutorial/{id}")
     @PreAuthorize("hasAnyRole('Admin','Instructor')")
-    public ResponseEntity<?> updateTutorial(@PathVariable Integer id, @RequestBody TutorialDTO tutorialDTO) {
+    public ResponseEntity<?> updateTutorial(
+        @PathVariable Integer id,
+        @RequestPart("tutorial") String tutorialJson,
+        @RequestPart(value = "descriptionFile", required = false) MultipartFile descriptionFile
+    ) throws IOException, TikaException {
+
+        TutorialDTO tutorialDTO = objectMapper.readValue(tutorialJson, TutorialDTO.class);
+
+        if (descriptionFile != null && !descriptionFile.isEmpty()) {
+            Tika tika = new Tika();
+            String extractedText = tika.parseToString(descriptionFile.getInputStream());
+            tutorialDTO.setContent(extractedText); // or tutorialDTO.setDescription(...)
+        }
+
         return handlerService.handleServiceCall(
-                () -> {
-                    String result = tutorialService.updateTutorial(id, tutorialDTO);
-                    if (!"success".equalsIgnoreCase(result)) {
-                        throw new UPLException("Tutorial update failed");
-                    }
-                    return null;
-                },
-                "INFO.TUTORIAL_UPDATE_SUCCESS"
+            () -> {
+                String result = tutorialService.updateTutorial(id, tutorialDTO);
+                if (!"success".equalsIgnoreCase(result)) {
+                    throw new UPLException("Tutorial update failed");
+                }
+                return null;
+            },
+            "INFO.TUTORIAL_UPDATE_SUCCESS"
         );
     }
+
 
     @DeleteMapping("/deleteTutorial/{id}")
     @PreAuthorize("hasAnyRole('Admin','Instructor')")

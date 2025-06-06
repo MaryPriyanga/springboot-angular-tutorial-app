@@ -40,6 +40,7 @@ public ResponseEntity<?> handleServiceCall(Supplier<Object> action, String succe
                     pageResult.getContent(),
                     (int) pageResult.getTotalElements()
             ));
+           
         } else if (result instanceof PageResponse<?>) {
             PageResponse<?> pageResponse = (PageResponse<?>) result;
             return ResponseEntity.ok(new ApiResponse<>(

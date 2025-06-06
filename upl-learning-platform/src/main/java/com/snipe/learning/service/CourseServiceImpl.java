@@ -2,12 +2,11 @@ package com.snipe.learning.service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,11 +24,13 @@ import com.snipe.learning.exception.UPLException;
 import com.snipe.learning.model.CourseDTO;
 import com.snipe.learning.model.PageResponse;
 import com.snipe.learning.repository.CourseEditHistoryRepository;
+import com.snipe.learning.repository.CourseRatingRepository;
 import com.snipe.learning.repository.CourseRepository;
 import com.snipe.learning.repository.TutorialRepository;
 import com.snipe.learning.repository.UserRepository;
 import com.snipe.learning.utility.Mapper;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 
 @Service
@@ -49,14 +50,27 @@ public class CourseServiceImpl implements CourseService {
 
     @Autowired
     private Mapper mapper;
+    
+    @Autowired
+    private CourseRatingRepository courseRatingRepository;
+    
+    @Autowired
+	private EmailService emailService;
+    
+    @Autowired
+    private NotificationService notificationService;
+    
+    //@Autowired
+    //private RedisTemplate<String, String> redisTemplate;
 
     @Override
-    @Cacheable(value = "courses", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateCourseCacheKey(#page, #size)")
+   // @Cacheable(value = "courses", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateCourseCacheKey(#page, #size)")
     public PageResponse<CourseDTO> getAllCourses(int page, int size) throws UPLException {
         User currentUser = getCurrentUserOrNull();
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         Page<Course> courses;
 
+       
         if (currentUser == null) {
             // General public: only active courses
         	System.out.println("Fetching from DB");
@@ -77,11 +91,16 @@ public class CourseServiceImpl implements CourseService {
         
         
         System.out.println("getAllCourses called with page=" + page + ", size=" + size);
-
+        
         List<CourseDTO> dtos = courses.getContent()
-                .stream()
-                .map(mapper::toCourseDto)
-                .collect(Collectors.toList());
+        	    .stream()
+        	    .map(course -> {
+        	        CourseDTO dto = mapper.toCourseDto(course);
+        	        Double avgRating = courseRatingRepository.findAverageRatingByCourseId(course.getId());
+        	        dto.setAverageRating(avgRating != null ? avgRating : 0.0);
+        	        return dto;
+        	    })
+        	    .collect(Collectors.toList());
         
         return new PageResponse<>(
                 dtos,
@@ -94,7 +113,7 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
-    @CacheEvict(value = "courses", allEntries = true)
+    //@CacheEvict(value = "courses", allEntries = true)
     public CourseDTO addCourse(CourseDTO courseDTO) throws UPLException {
         if (courseRepository.findByTitleIgnoreCase(courseDTO.getTitle()).isPresent()) {
             throw new UPLException("Course with this title already exists");
@@ -115,7 +134,7 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     @Transactional
-    @CacheEvict(value="courses" , allEntries = true)
+    //@CacheEvict(value="courses" , allEntries = true)
     public CourseDTO updateCourse(Integer id, CourseDTO courseDTO) throws UPLException {
         Course course = findCourseById(id);
         
@@ -152,7 +171,7 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
-    @CacheEvict(value="courses" , allEntries = true)
+   // @CacheEvict(value="courses" , allEntries = true)
     @Transactional
     public String deleteCourse(Integer id) throws UPLException {
         Course course = findCourseById(id);
@@ -217,7 +236,7 @@ public class CourseServiceImpl implements CourseService {
         courseEditHistoryRepository.save(history);
     }
 
-    @CacheEvict(value = "courses", allEntries = true)
+    //@CacheEvict(value = "courses", allEntries = true)
     public void updateCourseStatus(Integer id, Status status) throws UPLException {
     	User user = getLoggedInUser();
     	if (!isAdmin(user)) {
@@ -226,6 +245,19 @@ public class CourseServiceImpl implements CourseService {
         Course course = findCourseById(id);
         course.setStatus(status);
         courseRepository.save(course);
+        
+        User instructor = course.getInstructor();
+        
+        if(status.equals(Course.Status.Active)) {
+            emailService.sendApprovalNotificationforCourse(instructor.getEmail(), instructor.getName());
+            String msg = "Your course with ID " + id + " has been approved!";
+            notificationService.sendCourseApprovalNotification(instructor.getId(), msg);
+            }
+            if(status.equals(Course.Status.Rejected)){
+            	emailService.sendRejectNotificationforCourse(instructor.getEmail(), instructor.getName());
+            	String msg = "Your course with ID " + id + " has been rejected!";
+                notificationService.sendCourseRejectNotification(instructor.getId(), msg);
+            }
     }
 
 	@Override
@@ -265,10 +297,14 @@ public class CourseServiceImpl implements CourseService {
         }
 
         List<CourseDTO> dtos = courses.getContent()
-		        .stream()
-		        .map(mapper::toCourseDto)
-		        .collect(Collectors.toList());
-	 
+        	    .stream()
+        	    .map(course -> {
+        	        CourseDTO dto = mapper.toCourseDto(course);
+        	        Double avgRating = courseRatingRepository.findAverageRatingByCourseId(course.getId());
+        	        dto.setAverageRating(avgRating != null ? avgRating : 0.0);
+        	        return dto;
+        	    })
+        	    .collect(Collectors.toList());
 	 return new PageResponse<>(
 		        dtos,
 		        courses.getNumber(),
@@ -278,4 +314,48 @@ public class CourseServiceImpl implements CourseService {
 		        courses.isLast()
 		    );
 	}
+
+	@Override
+	public void incrementCourseViews(Integer id, HttpServletRequest request) throws UPLException {
+
+		/*
+		 * String ipAddress = request.getRemoteAddr(); String key = "view: Course" +id
+		 * +":IP" +ipAddress;
+		 * 
+		 * Boolean alreadyViewed = redisTemplate.hasKey(key);
+		 * if(Boolean.FALSE.equals(alreadyViewed)) {
+		 * System.out.println("Incremented view count for  COurse " +key); Course course
+		 * = courseRepository.findById(id) .orElseThrow(() -> new
+		 * UPLException("Course Not found"));
+		 * 
+		 * course.setViews(course.getViews() + 1); courseRepository.save(course);
+		 * redisTemplate.opsForValue().set(key, "1", Duration.ofHours(24)); }
+		 */
+		
+		 Course course = courseRepository.findById(id)
+			        .orElseThrow(() -> new UPLException("Course not found"));
+			    course.setViews(course.getViews() + 1);
+			    courseRepository.save(course);
+		
+	}
+	
+	@Override
+	public List<Map<String, Object>> getTrendingCourses() throws UPLException {
+	    
+		Pageable topTen = PageRequest.of(0, 10);
+	    List<Map<String, Object>> courses = courseRepository.findTrendingCourses(topTen);
+
+	    List<Map<String, Object>> trendingCourses = courses.stream()
+	        .filter(c -> {
+	            Object viewsObj = c.get("totalViews");
+	            if (viewsObj instanceof Number) {
+	                return ((Number) viewsObj).longValue() > 0;
+	            }
+	            return false;
+	        })
+	        .collect(Collectors.toList());
+
+	    return trendingCourses; 
+	}
+
 }

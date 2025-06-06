@@ -2,11 +2,10 @@ package com.snipe.learning.service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,9 +46,12 @@ public class TutorialServiceImpl implements TutorialService {
 
     @Autowired
     private Mapper mapper;
+    
+    @Autowired
+    private EmailService emailService;
 
     @Override
-    @Cacheable(value = "tutorialsbyId", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateTutorialCacheKey(#courseId, #pageable.pageNumber, #pageable.pageSize)")
+    //@Cacheable(value = "tutorialsbyId", key = "T(com.snipe.learning.utility.CacheKeyHelper).generateTutorialCacheKey(#courseId, #pageable.pageNumber, #pageable.pageSize)")
     public List<TutorialDTO> getAllTutorialsByCourseId(int courseId, Pageable pageable) throws UPLException {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new UPLException("Course not found"));
@@ -80,10 +82,14 @@ public class TutorialServiceImpl implements TutorialService {
 
 
     @Override
-    @CacheEvict(value="tutorialsbyId" , allEntries = true)
+    //@CacheEvict(value="tutorialsbyId" , allEntries = true)
     public void addTutorial(TutorialDTO tutorialDTO) throws UPLException {
         Course course = courseRepository.findById(tutorialDTO.getCourseId())
                 .orElseThrow(() -> new UPLException("Course does not exist"));
+        
+        if (tutorialRepository.findByTitleIgnoreCase(tutorialDTO.getTitle()).isPresent()) {
+            throw new UPLException("Tutorial with this title already exists");
+        }
 
         if (course.getStatus() != Status.Active) {
             throw new UPLException("Cannot add tutorials under an inactive course");
@@ -116,7 +122,7 @@ public class TutorialServiceImpl implements TutorialService {
     
     @Override
     @Transactional
-    @CacheEvict(value = "tutorialsbyId", allEntries = true)
+    //@CacheEvict(value = "tutorialsbyId", allEntries = true)
     public String updateTutorial(Integer id, TutorialDTO tutorialDTO) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(id)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
@@ -163,7 +169,7 @@ public class TutorialServiceImpl implements TutorialService {
 
     @Override
     @Transactional
-    @CacheEvict(value="tutorialsbyId" , allEntries = true)
+    //@CacheEvict(value="tutorialsbyId" , allEntries = true)
     public String deleteTutorial(Integer id) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(id)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
@@ -190,7 +196,7 @@ public class TutorialServiceImpl implements TutorialService {
     }
 
     @Override
-    @Cacheable(value="tutorial")
+    //@Cacheable(value="tutorial")
     public TutorialDTO getTutorial(Integer tutorialId) throws UPLException {
         Tutorial tutorial = tutorialRepository.findById(tutorialId)
                 .orElseThrow(() -> new UPLException("Tutorial not found"));
@@ -252,6 +258,24 @@ public class TutorialServiceImpl implements TutorialService {
         
         tutorial.setStatus(status);
         tutorialRepository.save(tutorial);
+        
+        Integer courseId = tutorial.getCourse().getId();
+        Optional<Course> courseOpt = courseRepository.findById(courseId);
+        Course course;
+
+        if (courseOpt.isPresent()) {
+             course = courseOpt.get();
+        } else {
+            throw new UPLException("Course not found with ID: " + courseId);
+        }
+        User instructor = course.getInstructor();
+        
+        if(status.equals(Course.Status.Active)) {
+            emailService.sendApprovalNotificationforTutorial(instructor.getEmail(), instructor.getName());
+            }
+            if(status.equals(Course.Status.Rejected)){
+            	emailService.sendRejectNotificationforTutorial(instructor.getEmail(), instructor.getName());
+            }
 	}
 
 	@Override
@@ -305,6 +329,41 @@ public class TutorialServiceImpl implements TutorialService {
 				        pendingTutorialssObj.isLast()
 				    );
 				    
+	}
+
+
+	@Override
+	public List<TutorialDTO> getAllTutorials()  throws UPLException {
+
+        User loggedInUser = getCurrentUserOrNull();
+
+        List<Tutorial> tutorialPage;
+
+       if (isAdmin(loggedInUser)) {
+        	List<Status> statuses = Arrays.asList(Status.Pending, Status.Rejected, Status.Active);
+            tutorialPage = tutorialRepository.findByStatusIn(statuses);
+        } else if (isInstructor(loggedInUser)) {
+        	Integer instructorId = loggedInUser.getId();
+        	List<Status> statuses = Arrays.asList(Status.Pending, Status.Rejected, Status.Active);
+            tutorialPage = tutorialRepository.findByInstructorIdAndStatusIn(instructorId,statuses);
+        } else {
+            throw new UPLException("Unauthorized access to course tutorials");
+        }
+
+        if (tutorialPage.isEmpty()) {
+            throw new UPLException("No tutorials found for this course");
+        }
+        
+        List<TutorialDTO> dtos = tutorialPage
+        	    .stream()
+        	    .map(tutorial -> {
+        	    	TutorialDTO dto = mapper.toTutorialDTO(tutorial);
+        	        return dto;
+        	    })
+        	    .collect(Collectors.toList());
+        return dtos;
+       
+
 	}
 
 }

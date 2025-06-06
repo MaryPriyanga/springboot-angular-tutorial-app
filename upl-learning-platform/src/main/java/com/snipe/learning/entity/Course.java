@@ -39,7 +39,20 @@ public class Course {
     @Column(updatable = false)
     private Timestamp createdAt;
     
-    public enum Status {
+    private Long views = 0L;
+    
+    public Course() {
+	}
+
+	public Long getViews() {
+		return views;
+	}
+
+	public void setViews(Long views) {
+		this.views = views;
+	}
+
+	public enum Status {
         Active, Inactive, Pending, Rejected
     }
     

@@ -3,7 +3,7 @@ package com.snipe.learning.controller;
 import com.snipe.learning.AOP.HandlerService;
 import com.snipe.learning.entity.User;
 import com.snipe.learning.model.UserDTO;
-import com.snipe.learning.service.AdminService;
+import com.snipe.learning.service.AuthService;
 import com.snipe.learning.utility.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +16,7 @@ import java.util.Map;
 public class AuthController {
 
     @Autowired
-    private AdminService userService;
+    private AuthService userService;
 
 
     @Autowired

@@ -10,7 +10,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.snipe.learning.entity.InstructorApprovalLog;
@@ -53,61 +52,20 @@ public class AdminServiceImpl implements AdminService{
 	private Mapper mapper;
 	
 	@Autowired
-	private PasswordEncoder passwordEncoder;
+	private EmailService emailService;	
 
 	@Autowired
     private InstructorApprovalLogRepository logRepository;
 		
-	@Override
-	public void registerInstructor(UserDTO userDTO) throws UPLException {
-		if (userRepository.findByEmail(userDTO.getEmail())
-		        .filter(u -> u.getStatus() == Status.Active)
-		        .isPresent()) {
-		    throw new UPLException("User already registered and active");
-		}
-		if (userRepository.findByEmail(userDTO.getEmail())
-				.filter(u -> u.getStatus() == Status.Pending)
-		        .isPresent()) {
-		    throw new UPLException("User already registered and awaiting for admin approval");
-		}
-		User user = mapper.toUserEntity(userDTO);
-    	user.setPassword(passwordEncoder.encode(userDTO.getPassword()));
-		userRepository.save(user);
-	}
-
-	@Override
-	public User login(String email, String password) throws UPLException {
-
-		if (email == null || password == null) {
-		    throw new UPLException("Email and password must be provided");
-		}
-
-	    User user = userRepository.findByEmail(email)
-	        .orElseThrow(() -> new UPLException("Invalid email or password"));
-
-	    if (!passwordEncoder.matches(password, user.getPassword())) {
-	        throw new UPLException("Invalid email or password");
-	    }
-
-	    switch (user.getStatus()) {
-	        case Pending -> throw new UPLException("Awaiting admin approval");
-	        case Rejected -> throw new UPLException("Admin rejected your registration");
-	        case Active -> {
-	            return user;
-	        }
-	        default -> throw new UPLException("Invalid account status");
-	    }
-	}
-
-
+	
 	@Override
     @Transactional
-    public void approveInstructor(Integer id) throws UPLException {
+    public void manageInstructor(Integer id, Status status) throws UPLException {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new UPLException("User Not found"));
         
         // Admin Approval logic
-        user.setStatus(User.Status.Active);
+        user.setStatus(status);
         userRepository.save(user);
         
         // Get logged-in Admin's information
@@ -119,35 +77,20 @@ public class AdminServiceImpl implements AdminService{
         InstructorApprovalLog log = new InstructorApprovalLog();
         log.setUser(user);
         log.setAdmin(admin);
-        log.setRemarks("Instructor approved");
-        log.setStatus(InstructorApprovalLog.Status.Approved);
+        log.setRemarks("Instructor " +status);
+        if(status.equals(User.Status.Active)) {
+        	log.setStatus(User.Status.Approved);
+        }else {
+        log.setStatus(status);}
         logRepository.save(log);
+        
+        if(status.equals(User.Status.Active)) {
+        emailService.sendApprovalNotification(user.getEmail(), user.getName());
+        }
+        if(status.equals(User.Status.Rejected)){
+        	emailService.sendRejectNotification(user.getEmail(), user.getName());
+        }
     }
-
-    @Override
-    @Transactional
-    public void rejectInstructor(Integer id) throws UPLException {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new UPLException("User Not found"));
-
-        // Admin Reject logic
-        user.setStatus(User.Status.Rejected);
-        userRepository.save(user);
-
-        // Get logged-in Admin's information
-        String adminEmail = SecurityContextHolder.getContext().getAuthentication().getName();
-        User admin = userRepository.findByEmail(adminEmail)
-                .orElseThrow(() -> new UPLException("Admin Not found"));
-
-        // Create the log entry for instructor rejection
-        InstructorApprovalLog log = new InstructorApprovalLog();
-        log.setUser(user);
-        log.setAdmin(admin);
-        log.setRemarks("Instructor rejected");
-        log.setStatus(InstructorApprovalLog.Status.Rejected);
-        logRepository.save(log);
-    }
-
 
     @Override
     public Page<UserDTO> getPendingInstructors(int page, int size) throws UPLException {
@@ -181,8 +124,6 @@ public class AdminServiceImpl implements AdminService{
         stats.put("totalInstructors", userRepository.count());
         stats.put("totalCourses", courseRepository.count());
         stats.put("totalTutorials", tutorialRepository.count());
-        //stats.put("totalCourseEdits", courseEditHistoryRepository.count());
-        //stats.put("totalTutorislEdits", tutorialEditHistoryRepository.count());
         return stats;
 	}
 

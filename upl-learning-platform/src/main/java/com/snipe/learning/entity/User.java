@@ -48,7 +48,7 @@ public class User {
     }
 
     public enum Status {
-        Active, Pending, Rejected
+        Active, Pending, Rejected, Approved
     }
 
 	

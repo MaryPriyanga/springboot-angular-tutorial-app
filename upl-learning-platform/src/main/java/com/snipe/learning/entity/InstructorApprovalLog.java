@@ -36,14 +36,9 @@ public class InstructorApprovalLog {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status;
+    private User.Status status;
 
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    public enum Status {
-        Approved,
-        Rejected
-    }
 
     public Integer getLogId() {
         return logId;
@@ -77,11 +72,11 @@ public class InstructorApprovalLog {
         this.remarks = remarks;
     }
 
-    public Status getStatus() {
+    public User.Status getStatus() {
         return status;
     }
 
-    public void setStatus(Status status) {
+    public void setStatus(User.Status status) {
         this.status = status;
     }
 

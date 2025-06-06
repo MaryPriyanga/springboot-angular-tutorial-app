@@ -10,16 +10,26 @@ public class CourseDTO {
     private String instructorName;
     private String status;      
     private Timestamp createdAt;
+    private Double averageRating;
+    private Long views;
     
-    
-	public CourseDTO() {
+	public Long getViews() {
+		return views;
 	}
-	
-	public CourseDTO(String title, String description, Integer instructorId, String status) {
-		this.title = title;
-		this.description = description;
-		this.instructorId = instructorId;
-		this.status = status;
+
+	public void setViews(Long views) {
+		this.views = views;
+	}
+
+	public Double getAverageRating() {
+		return averageRating;
+	}
+
+	public void setAverageRating(Double averageRating) {
+		this.averageRating = averageRating;
+	}
+
+	public CourseDTO() {
 	}
 
 

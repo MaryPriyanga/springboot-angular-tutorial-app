@@ -1,5 +1,6 @@
 package com.snipe.learning.controller;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.snipe.learning.AOP.HandlerService;
 import com.snipe.learning.entity.Course.Status;
+import com.snipe.learning.entity.User;
 import com.snipe.learning.service.AdminService;
 import com.snipe.learning.service.CourseService;
 import com.snipe.learning.service.TutorialService;
@@ -62,7 +64,7 @@ public class AdminController {
     @PostMapping("/approve-instructor/{id}")
     public ResponseEntity<?> approve(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            adminService.approveInstructor(id);
+            adminService.manageInstructor(id, User.Status.Active);
             return null;
         }, "INFO.INSTRUCTOR_APPROVED");
     }
@@ -70,7 +72,7 @@ public class AdminController {
     @PostMapping("/reject-instructor/{id}")
     public ResponseEntity<?> reject(@PathVariable Integer id) {
         return handlerService.handleServiceCall(() -> {
-            adminService.rejectInstructor(id);
+            adminService.manageInstructor(id, User.Status.Rejected);
             return null;
         }, "INFO.INSTRUCTOR_REJECTED");
     }
@@ -131,4 +133,8 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getInstructorStatusCounts());
     }
     
+    @GetMapping("/trending-courses")
+    public ResponseEntity<List<Map<String, Object>>> getTrendingCourses() {
+        return ResponseEntity.ok(courseService.getTrendingCourses());
+    }
 }

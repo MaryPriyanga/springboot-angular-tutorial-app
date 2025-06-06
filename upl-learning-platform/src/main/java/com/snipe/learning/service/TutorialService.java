@@ -21,4 +21,5 @@ public interface TutorialService {
 	public TutorialDTO getPendingTutorial(Integer id) throws UPLException;
 	List<TutorialDTO> getAllTutorialsByCourseId(int courseId, Pageable pageable) throws UPLException;
 	void updateTutorialStatus(Integer id, Status status) throws UPLException;
+	public List<TutorialDTO> getAllTutorials() throws UPLException;
 }
